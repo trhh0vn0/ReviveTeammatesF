@@ -18,7 +18,9 @@ enum CVARS {
 	Float:CORPSE_TIME,
 	Float:SEARCH_RADIUS,
 	FORCE_FWD_MODE,
-	CORPSE_MODEL_MODE
+	CORPSE_MODEL_MODE,
+	SPAWN_MODE,
+	Float:SPAWN_BEHIND_OFFSET
 };
 
 new g_eCvars[CVARS];
@@ -94,6 +96,10 @@ public CSGameRules_CleanUpMap_Post() {
 
 public CBasePlayer_UseEmpty_Pre(const iActivator) {
 	if(~get_entvar(iActivator, var_flags) & FL_ONGROUND)
+		return;
+
+	// Already reviving/planting — do not start another activation
+	if(g_iCurrentMode[iActivator] != MODE_NONE)
 		return;
 
 	new iEnt = RT_NULLENT;
@@ -277,7 +283,7 @@ public Corpse_Think(const iEnt) {
 			NotifyClient(iActivator, print_team_red, "RT_REVIVE", iPlayer);
 			NotifyClient(iPlayer, print_team_red, "RT_REVIVED", iActivator);
 
-			get_entvar(iActivator, var_origin, g_fVecSpawnOrigin);
+			ComputeSpawnOrigin(iEnt, iActivator);
 
 			RemoveCorpses(iPlayer, DEAD_BODY_CLASSNAME);
 
@@ -290,7 +296,8 @@ public Corpse_Think(const iEnt) {
 		}
 
 		if(!is_user_alive(iActivator)) {
-			ResetCorpseThink(g_eForwards[ReviveCancelled], iEnt, iPlayer, iActivator, eCurrentMode);
+			g_iCurrentMode[iActivator] = MODE_NONE;
+			ExecuteForward(g_eForwards[ReviveEnd], _, iEnt, iPlayer, iActivator, eCurrentMode);
 			return;
 		}
 
@@ -482,6 +489,26 @@ public CreateCvars() {
 		1.0),
 		g_eCvars[CORPSE_MODEL_MODE]
 	);
+	bind_pcvar_num(create_cvar(
+		"rt_spawn_mode",
+		"0",
+		FCVAR_NONE,
+		"Where to spawn a revived player. 0 - at corpse position (default), 1 - just behind the reviver",
+		true,
+		0.0,
+		true,
+		1.0),
+		g_eCvars[SPAWN_MODE]
+	);
+	bind_pcvar_float(create_cvar(
+		"rt_spawn_behind_offset",
+		"40.0",
+		FCVAR_NONE,
+		"Distance (units) behind the reviver to spawn the revived player when rt_spawn_mode is 1",
+		true,
+		1.0),
+		g_eCvars[SPAWN_BEHIND_OFFSET]
+	);
 }
 
 /**
@@ -515,6 +542,7 @@ public plugin_natives() {
 	set_native_filter("native_filter");
 	register_native("rt_get_user_mode", "_rt_get_user_mode");
 	register_native("rt_reset_use", "_rt_reset_use");
+	register_native("rt_activate_corpse", "_rt_activate_corpse");
 }
 
 public Modes:_rt_get_user_mode() {
@@ -549,6 +577,54 @@ public bool:_rt_reset_use() {
 	return false;
 }
 
+public bool:_rt_activate_corpse() {
+	enum { arg_ent = 1, arg_activator = 2 };
+
+	Corpse_Use(get_param(arg_ent), get_param(arg_activator));
+	return true;
+}
+
 public native_filter(const szNativeName[], iNativeID, iTrapMode) {
 	return PLUGIN_HANDLED;
+}
+
+/**
+ * Compute the spawn origin for a revived player.
+ *
+ * rt_spawn_mode 0 (default): uses the corpse entity's saved position.
+ * rt_spawn_mode 1           : uses a point just behind the reviver.
+ * In both modes a basic hull-vacancy check is performed; if the
+ * candidate position is inside solid geometry the reviver's current
+ * origin is used as a fallback so the player still respawns.
+ */
+stock ComputeSpawnOrigin(const iEnt, const iActivator) {
+	new Float:fCandidate[3];
+
+	if(g_eCvars[SPAWN_MODE] == 1) {
+		// Mode 1 – just behind the reviver
+		new Float:fAngles[3], Float:fForward[3];
+		get_entvar(iActivator, var_origin, fCandidate);
+		get_entvar(iActivator, var_v_angle, fAngles);
+
+		fAngles[0] = fAngles[2] = 0.0;
+		angle_vector(fAngles, ANGLEVECTOR_FORWARD, fForward);
+
+		fCandidate[0] -= fForward[0] * g_eCvars[SPAWN_BEHIND_OFFSET];
+		fCandidate[1] -= fForward[1] * g_eCvars[SPAWN_BEHIND_OFFSET];
+	} else {
+		// Mode 0 – at corpse position (default / bug-fix)
+		get_entvar(iEnt, var_origin, fCandidate);
+	}
+
+	// Hull-vacancy check: if candidate is solid, fall back to reviver origin
+	new pTrace = create_tr2();
+	engfunc(EngFunc_TraceHull, fCandidate, fCandidate, DONT_IGNORE_MONSTERS, HULL_HUMAN, iActivator, pTrace);
+	new bool:bValid = !(get_tr2(pTrace, TR_AllSolid) || get_tr2(pTrace, TR_StartSolid));
+	free_tr2(pTrace);
+
+	if(bValid) {
+		g_fVecSpawnOrigin = fCandidate;
+	} else {
+		get_entvar(iActivator, var_origin, g_fVecSpawnOrigin);
+	}
 }

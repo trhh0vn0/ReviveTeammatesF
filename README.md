@@ -41,6 +41,8 @@ Download the archive and unpack it
 | rt_corpse_time | 30.0 | 0.0 | - | Duration of a corpse's life (in seconds). If you set it to 0, the corpse lives until the end of the round. |
 | rt_search_radius | 64.0 | 1.0 | - | Search radius for a corpse |
 | rt_force_fwd_mode | 0 | 0 | 1 | Execute forwards more often. Set this to 1 if 'rt_no_move 1' didn't work properly. |
+| rt_spawn_mode | 0 | 0 | 1 | Where to spawn a revived player. 0 - at corpse position (default), 1 - just behind the reviver |
+| rt_spawn_behind_offset | 40.0 | 1.0 | - | Distance (units) behind the reviver used when rt_spawn_mode is 1 |
 
 </details>
 
@@ -91,6 +93,17 @@ Download the archive and unpack it
 | rt_planting_cost | 0 | 0 | - | Cost of planting |
 | rt_wins_domination | 5 | 0 | - | Prohibition of resurrection/mining for the dominant team(consecutive wins) |
 | rt_remaining_time | 30.0 | 0.0 | - | Prohibition resurrection/planting if there is little time left until the end of the round |
+
+</details>
+
+<details>
+<summary>rt_bot_revive.cfg</summary>
+
+| Cvar | Def Var | Min Var | Max Var | Description |
+|------|:-------:|:-------:|:-------:|------------:|
+| rt_bot_enable | 1 | 0 | 1 | Enable automatic bot revive behaviour. 0 - disabled, 1 - enabled |
+| rt_bot_think_interval | 0.8 | 0.1 | - | How often (in seconds) each living bot scans for a dead teammate to revive |
+| rt_bot_radius_mult | 1.0 | 0.1 | - | Multiplier applied to rt_search_radius when bots scan for corpses. 1.0 = same as human range |
 
 </details>
 

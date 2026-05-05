@@ -178,6 +178,24 @@ native Modes:rt_get_user_mode(iPlayer);
 native bool:rt_reset_use(iPlayer);
 
 /**
+ * Directly activate a corpse entity for an activator player, using the
+ * same Corpse_Use() code-path as a human pressing USE.  All existing
+ * restrictions, timers and forwards (rt_revive_start, etc.) are fully
+ * respected.
+ *
+ * @note   Intended for use by bot-control plugins.  The activator must
+ *         subsequently hold the equivalent of IN_USE (var_button) for
+ *         the duration of the revive or the process will be cancelled
+ *         in the same way as for a human who releases the USE key.
+ *
+ * @param iEnt           Corpse entity index (classname rt_corpse_empty)
+ * @param iActivator     Client index of the would-be reviver
+ *
+ * @noreturn
+ */
+native rt_activate_corpse(iEnt, iActivator);
+
+/**
  * Removal of corpses
  *
  * @param iPlayer        Player id whose corpse or 0 for all corpses
