@@ -53,12 +53,9 @@ public plugin_init() {
 }
 
 public plugin_cfg() {
-	/* Start repeating scan task with the configured interval */
-	new Float:fInterval = g_eCvars[BOT_THINK_INTERVAL];
-	if(fInterval < 0.1)
-		fInterval = 0.1;
-
-	set_task(fInterval, "BotReviveScan", TASK_BOT_SCAN, _, _, "b");
+	/* Start the repeating scan task with the configured interval.
+	   bind_pcvar_float already clamps to the declared minimum (0.1 s). */
+	set_task(g_eCvars[BOT_THINK_INTERVAL], "BotReviveScan", TASK_BOT_SCAN, _, _, "b");
 }
 
 /* ── forward hooks ──────────────────────────────────────────────────── */
@@ -160,9 +157,6 @@ BotFindNearestCorpse(const iBot) {
 
 	new iEnt = RT_NULLENT;
 	while((iEnt = rg_find_ent_by_class(iEnt, DEAD_BODY_CLASSNAME)) > 0) {
-		if(is_nullent(iEnt))
-			continue;
-
 		/* Skip corpses already being revived by someone */
 		if(get_entvar(iEnt, var_iuser1))
 			continue;
