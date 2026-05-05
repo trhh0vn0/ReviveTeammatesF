@@ -236,10 +236,14 @@ public Corpse_Think(const iEnt) {
 		return;
 	}
 
-	if(~get_entvar(iActivator, var_button) & IN_USE) {
-		NotifyClient(iActivator, print_team_red, eCurrentMode == MODE_REVIVE ? "RT_CANCELLED_REVIVE" : "RT_CANCELLED_PLANT");
-		ResetCorpseThink(g_eForwards[ReviveCancelled], iEnt, iPlayer, iActivator, eCurrentMode);
-		return;
+	// If activator is a bot, keep the action alive without requiring IN_USE.
+	// A separate bot plugin can drive this via native (rt_try_use_corpse) without having to fake buttons.
+	if(!is_user_bot(iActivator)) {
+		if(~get_entvar(iActivator, var_button) & IN_USE) {
+			NotifyClient(iActivator, print_team_red, eCurrentMode == MODE_REVIVE ? "RT_CANCELLED_REVIVE" : "RT_CANCELLED_PLANT");
+			ResetCorpseThink(g_eForwards[ReviveCancelled], iEnt, iPlayer, iActivator, eCurrentMode);
+			return;
+		}
 	}
 
 	new Float:fTimeUntil[2];
@@ -277,7 +281,9 @@ public Corpse_Think(const iEnt) {
 			NotifyClient(iActivator, print_team_red, "RT_REVIVE", iPlayer);
 			NotifyClient(iPlayer, print_team_red, "RT_REVIVED", iActivator);
 
-			get_entvar(iActivator, var_origin, g_fVecSpawnOrigin);
+			// Spawn revived player at corpse position to avoid getting stuck inside the activator.
+			get_entvar(iEnt, var_vuser4, g_fVecSpawnOrigin);
+			g_fVecSpawnOrigin[2] += 8.0;
 
 			RemoveCorpses(iPlayer, DEAD_BODY_CLASSNAME);
 
@@ -285,8 +291,10 @@ public Corpse_Think(const iEnt) {
 			rg_round_respawn(iPlayer);
 			DisableHookChain(g_pHook_GetPlayerSpawnSpot);
 
-			if(is_user_alive(iPlayer))
+			if(is_user_alive(iPlayer)) {
+				set_entvar(iPlayer, var_velocity, NULL_VECTOR);
 				engfunc(EngFunc_SetOrigin, iPlayer, g_fVecSpawnOrigin);
+			}
 		}
 
 		if(!is_user_alive(iActivator)) {
@@ -342,9 +350,6 @@ public MessageHook_ClCorpse() {
 		return PLUGIN_HANDLED;
 	}
 
-	/*new szModel[32], szModelPath[MAX_RESOURCE_PATH_LENGTH];
-	get_user_info(iPlayer, "model", szModel, charsmax(szModel));
-	formatex(szModelPath, charsmax(szModelPath), "models/player/%s/%s.mdl", szModel, szModel);*/
 	new szModelPath[MAX_RESOURCE_PATH_LENGTH];
 
 	new Float:fVecOrigin[3];
@@ -377,8 +382,6 @@ public MessageHook_ClCorpse() {
 
 	set_entvar(iEnt, var_modelindex, engfunc(EngFunc_ModelIndex, szModelPath));
 	set_entvar(iEnt, var_model, szModelPath);
-	//set_entvar(iEnt, var_renderfx, kRenderFxDeadPlayer);
-	//set_entvar(iEnt, var_renderamt, float(iPlayer));
 
 	set_entvar(iEnt, var_classname, DEAD_BODY_CLASSNAME);
 	set_entvar(iEnt, var_sequence, get_entvar(iPlayer, var_sequence));
@@ -386,7 +389,6 @@ public MessageHook_ClCorpse() {
 	set_entvar(iEnt, var_owner, iPlayer);
 	set_entvar(iEnt, var_team, iPlTeam);
 
-	//get_entvar(iPlayer, var_origin, fVecOrigin);
 	engfunc(EngFunc_SetOrigin, iEnt, fVecOrigin);
 
 	new Float:fVecAngles[3];
@@ -515,6 +517,7 @@ public plugin_natives() {
 	set_native_filter("native_filter");
 	register_native("rt_get_user_mode", "_rt_get_user_mode");
 	register_native("rt_reset_use", "_rt_reset_use");
+	register_native("rt_try_use_corpse", "_rt_try_use_corpse");
 }
 
 public Modes:_rt_get_user_mode() {
@@ -547,6 +550,26 @@ public bool:_rt_reset_use() {
 
 	g_iCurrentMode[pPlayer] = MODE_NONE;
 	return false;
+}
+
+public bool:_rt_try_use_corpse() {
+	enum { arg_ent = 1, arg_activator = 2 };
+
+	new iEnt = get_param(arg_ent);
+	new iActivator = get_param(arg_activator);
+
+	if(!is_entity(iEnt) || !is_user_connected(iActivator)) {
+		return false;
+	}
+
+	static szClass[32];
+	get_entvar(iEnt, var_classname, szClass, charsmax(szClass));
+	if(!equal(szClass, DEAD_BODY_CLASSNAME)) {
+		return false;
+	}
+
+	Corpse_Use(iEnt, iActivator);
+	return true;
 }
 
 public native_filter(const szNativeName[], iNativeID, iTrapMode) {
